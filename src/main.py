@@ -9,12 +9,12 @@ from typing import Optional
 from .capture import CaptureRegion, enable_dpi_awareness, get_monitor_region, list_monitors
 from .logger import LogRecord, OCRLogger
 from .ocr_engine import EngineName, ScreenOCREngine
+from .paths import APP_VERSION, get_config_path, get_default_log_dir
 from .region_selector import load_saved_region, save_region, select_region_interactive
 from .worker import ScreenOCRWorker
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
-DEFAULT_CONFIG = PROJECT_ROOT / "config.json"
+DEFAULT_LOG_DIR = get_default_log_dir()
+DEFAULT_CONFIG = get_config_path()
 
 
 def _configure_utf8_stdio() -> None:
@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ocr-vcam",
         description="Đọc chữ trực tiếp từ vùng màn hình (OCR) và ghi log thời gian + nội dung ra file.",
     )
+    p.add_argument("--version", action="version", version=f"OCR Text In Vcam {APP_VERSION}")
     p.add_argument("--gui", action="store_true", help="Mở giao diện điều khiển đồ họa (Tkinter).")
     p.add_argument("--list-monitors", action="store_true", help="Liệt kê danh sách màn hình và tọa độ.")
     p.add_argument("--select", action="store_true", help="Mở khung kéo chuột để chọn vùng màn hình.")

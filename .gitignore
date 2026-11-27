@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 logs/
 models/
+build/
+dist/
+release/
 config.json
 *.log
 *.jsonl

@@ -12,22 +12,28 @@ from typing import Optional
 from .capture import CaptureRegion, enable_dpi_awareness, get_monitor_region
 from .logger import LogRecord, OCRLogger
 from .ocr_engine import EngineName, ScreenOCREngine
+from .paths import APP_VERSION, get_config_path, get_default_log_dir, get_icon_path
 from .region_selector import load_saved_region, save_region, select_region_interactive
 from .worker import ScanStats, ScreenOCRWorker
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
-DEFAULT_CONFIG = PROJECT_ROOT / "config.json"
+DEFAULT_LOG_DIR = get_default_log_dir()
+DEFAULT_CONFIG = get_config_path()
 
 
 class OCRAppGUI:
     def __init__(self) -> None:
         enable_dpi_awareness()
         self.root = tk.Tk()
-        self.root.title("OCR Text In Vcam — Screen Logger")
+        self.root.title(f"OCR Text In Vcam v{APP_VERSION} — Screen Logger")
         self.root.geometry("760x540")
         self.root.minsize(640, 440)
         self.root.configure(bg="#0f172a")
+        icon_path = get_icon_path()
+        if icon_path is not None:
+            try:
+                self.root.iconbitmap(str(icon_path))
+            except Exception:
+                pass
 
         self.region: Optional[CaptureRegion] = load_saved_region(DEFAULT_CONFIG)
         self.worker: Optional[ScreenOCRWorker] = None

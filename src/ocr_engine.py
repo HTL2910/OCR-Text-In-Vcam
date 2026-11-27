@@ -14,6 +14,8 @@ import onnxruntime as ort
 import requests
 from rapidocr import EngineType, ModelType, OCRVersion, RapidOCR
 
+from .paths import get_bundled_models_dir, get_writable_models_dir
+
 EngineName = Literal["vietocr", "rapidocr"]
 
 _VIETOCR_BASE_URL = "https://huggingface.co/dzngo/vietocr-models/resolve/main/vietocr/"
@@ -48,11 +50,23 @@ class OCRResult:
         return "\n".join(self.lines)
 
 
+def _has_all_files(directory: Path, filenames: tuple[str, ...]) -> bool:
+    return all((directory / name).exists() and (directory / name).stat().st_size > 0 for name in filenames)
+
+
 def _ensure_vietocr_models(
-    models_dir: Path,
+    models_dir: Optional[Path] = None,
     on_status: Optional[Callable[[str], None]] = None,
 ) -> Path:
-    target_dir = models_dir / "vietocr"
+    # 1. Prefer read-only bundled models (packaged installer -> 100% offline)
+    if models_dir is None:
+        bundled = get_bundled_models_dir() / "vietocr"
+        if _has_all_files(bundled, _VIETOCR_FILES):
+            return bundled
+        target_dir = get_writable_models_dir() / "vietocr"
+    else:
+        target_dir = models_dir / "vietocr"
+
     target_dir.mkdir(parents=True, exist_ok=True)
     for filename in _VIETOCR_FILES:
         dst = target_dir / filename
@@ -69,6 +83,20 @@ def _ensure_vietocr_models(
                         f.write(chunk)
         tmp.replace(dst)
     return target_dir
+
+
+def _resolve_rapidocr_model_root(required_files: tuple[str, ...]) -> Optional[str]:
+    bundled = get_bundled_models_dir() / "rapidocr"
+    if _has_all_files(bundled, required_files):
+        return str(bundled)
+    writable = get_writable_models_dir() / "rapidocr"
+    if _has_all_files(writable, required_files):
+        return str(writable)
+    # In frozen installs, avoid writing into Program Files/site-packages
+    if bundled != writable:
+        writable.mkdir(parents=True, exist_ok=True)
+        return str(writable)
+    return None
 
 
 def _sort_reading_order(boxes_xyxy: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
@@ -212,7 +240,7 @@ class ScreenOCREngine:
         self.engine_name: EngineName = engine
         self.min_confidence = float(min_confidence)
         self.threads = threads or min(4, max(1, (os.cpu_count() or 4) // 2))
-        self.models_dir = Path(models_dir) if models_dir else Path(__file__).resolve().parent.parent / "models"
+        self.models_dir = Path(models_dir) if models_dir else None
 
         # Silence noisy RapidOCR info logs during polling
         logging.getLogger("RapidOCR").setLevel(logging.WARNING)
@@ -221,33 +249,37 @@ class ScreenOCREngine:
             if on_status:
                 on_status("Đang khởi tạo detector PP-OCRv6 + VietOCR ONNX...")
             viet_dir = _ensure_vietocr_models(self.models_dir, on_status=on_status)
-            self._detector = RapidOCR(
-                params={
-                    "Global.use_rec": False,
-                    "Global.use_cls": False,
-                    "Global.log_level": "warning",
-                    "Det.engine_type": EngineType.ONNXRUNTIME,
-                    "Det.ocr_version": OCRVersion.PPOCRV6,
-                    "Det.model_type": ModelType.TINY,
-                    "EngineConfig.onnxruntime.intra_op_num_threads": self.threads,
-                }
-            )
+            det_params: dict[str, object] = {
+                "Global.use_rec": False,
+                "Global.use_cls": False,
+                "Global.log_level": "warning",
+                "Det.engine_type": EngineType.ONNXRUNTIME,
+                "Det.ocr_version": OCRVersion.PPOCRV6,
+                "Det.model_type": ModelType.TINY,
+                "EngineConfig.onnxruntime.intra_op_num_threads": self.threads,
+            }
+            rapid_root = _resolve_rapidocr_model_root(("PP-OCRv6_det_tiny.onnx",))
+            if rapid_root:
+                det_params["Global.model_root_dir"] = rapid_root
+            self._detector = RapidOCR(params=det_params)
             self._recognizer: Optional[_VietOCRRecognizer] = _VietOCRRecognizer(viet_dir, threads=self.threads)
             self._rapid: Optional[RapidOCR] = None
         else:
             if on_status:
                 on_status("Đang khởi tạo RapidOCR PP-OCRv6...")
-            self._rapid = RapidOCR(
-                params={
-                    "Global.use_cls": False,
-                    "Global.log_level": "warning",
-                    "Det.engine_type": EngineType.ONNXRUNTIME,
-                    "Det.ocr_version": OCRVersion.PPOCRV6,
-                    "Det.model_type": ModelType.TINY,
-                    "Rec.engine_type": EngineType.ONNXRUNTIME,
-                    "EngineConfig.onnxruntime.intra_op_num_threads": self.threads,
-                }
-            )
+            rapid_params: dict[str, object] = {
+                "Global.use_cls": False,
+                "Global.log_level": "warning",
+                "Det.engine_type": EngineType.ONNXRUNTIME,
+                "Det.ocr_version": OCRVersion.PPOCRV6,
+                "Det.model_type": ModelType.TINY,
+                "Rec.engine_type": EngineType.ONNXRUNTIME,
+                "EngineConfig.onnxruntime.intra_op_num_threads": self.threads,
+            }
+            rapid_root = _resolve_rapidocr_model_root(("PP-OCRv6_det_tiny.onnx", "PP-OCRv6_rec_small.onnx"))
+            if rapid_root:
+                rapid_params["Global.model_root_dir"] = rapid_root
+            self._rapid = RapidOCR(params=rapid_params)
             self._detector = None
             self._recognizer = None
 

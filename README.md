@@ -37,8 +37,18 @@ Nhấp đúp `run_gui.bat` hoặc chạy:
 
 ## Định dạng file log
 
-Mặc định lưu tại `logs/ocr_YYYY-MM-DD.log`:
+Mặc định lưu tại `logs/ocr_YYYY-MM-DD.log` (hoặc `Documents\OCR Text In Vcam\logs\ocr_YYYY-MM-DD.log` khi cài bằng bản `.exe`):
 ```text
 [2026-11-26 13:52:04.128] Quay đầu sang trái và mỉm cười | Nháy mắt 2 lần để xác thực khuôn mặt
 [2026-11-26 13:52:07.610] Code: 849201 - Status: Verified OK
 ```
+
+## Đóng gói bộ cài Windows (`.exe`)
+
+Để đóng gói ứng dụng thành file cài đặt Windows độc lập (tích hợp sẵn toàn bộ model ONNX chạy offline, không yêu cầu người dùng cài Python):
+
+```powershell
+.\packaging\build_installer.ps1
+```
+
+File cài đặt đầu ra nằm tại `release\OCR-Text-In-Vcam-Setup-1.0.0.exe` (tạo shortcut Desktop/Start Menu, kèm trình gỡ cài đặt chuẩn Windows và file CLI `ocr-vcam-cli.exe`).
